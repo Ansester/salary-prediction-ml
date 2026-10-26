@@ -1,74 +1,55 @@
-# Data Science Salary Prediction Platform
+# Data science salary exploration
 
-An interactive machine learning application for predicting Data Science salaries based on job and company characteristics. The application combines PyCaret's automated model-comparison workflow, XGBoost regression, model feature-contribution analysis (SHAP), and experiment tracking (MLflow) within a Streamlit dashboard.
+A Streamlit coursework dashboard comparing a mean baseline, linear regression and XGBoost on historical Glassdoor salary estimates. Maintained by Ashmit Mukherjee for a Data Science / Applied Machine Learning project at NYU Abu Dhabi.
 
----
+## Data and evaluation
 
-## Context & Provenance
+The bundled CSV is reused from [PlayingNumbers/ds_salary_proj](https://github.com/PlayingNumbers/ds_salary_proj/blob/c8ab2c5629a4ba02809a708346fe826b50908c1f/salary_data_cleaned.csv), rather than collected for this repository. The 742 rows and all cell values match that upstream teaching dataset. Data collection and original cleaning belong to that upstream project. Its historical estimates are not current salaries or observed compensation.
 
-* **Project Context**: Coursework project for Data Science / Applied Machine Learning (NYU Abu Dhabi).
-* **Author**: Ashmit Mukherjee.
+Exact deduplication leaves 467 records. Ten distinct postings quote hourly wages, and their `avg_salary` values are dollars per hour rather than annual thousands; those are excluded instead of assuming annual working hours. The evaluation therefore uses **457 annual-estimate postings**. The target is the midpoint of each estimated salary range, in **thousands of USD**.
 
----
+All three models fit the same **365 training rows** and evaluate the same **92 held-out rows**. A `GroupShuffleSplit(test_size=0.2, random_state=42)` keeps normalized employer/title/location groups together. The five input fields are Python mentioned in the posting, company size category, revenue category, state and ownership category. One-hot encoders learn categorical values from training data only; states have no invented geographic rank. Unseen categories are accepted and flagged in the app.
 
-## Methodology & Model Architecture
+### New local CPU evaluation
 
-### Feature Matrix & Target
+These results were regenerated for the repaired split and target definition. They supersede the earlier `R²=0.57` claim, which used duplicated postings across a row-level split and is not directly comparable.
 
-The machine learning pipeline evaluates a **five-feature predictor matrix**:
-1. `python_yn` – Python skill requirement indicator (0/1).
-2. `Size` – Company size category.
-3. `Revenue` – Company annual revenue category.
-4. `job_state` – Geographic state location encoding.
-5. `Type of ownership` – Ownership category (Private, Public, Non-Profit).
+| Model | Holdout R² | MAE ($1,000) | RMSE ($1,000) |
+| --- | ---: | ---: | ---: |
+| Mean Baseline | -0.0007 | 26.93 | 33.85 |
+| Linear Regression | 0.1268 | 24.49 | 31.61 |
+| Xgboost | 0.1872 | 23.80 | 30.50 |
 
-*Target Variable (`y`)*: `avg_salary` (Average annual salary in $1,000s USD).
+[results/holdout.json](results/holdout.json) records the source SHA-256, exact train/test CSV row IDs, package versions, model settings and full metrics. XGBoost uses fixed settings, without tuning against this holdout. A single small historical split does not establish performance on new employers, later job markets, or individual salary negotiations. Shared employers and job categories can still cross the split; this is a posting-group evaluation, not an employer-held-out study.
 
-*(Note: While exploratory data analysis views include industry distributions, `Industry` is not included in the five-feature model predictor matrix).*
+The dashboard's feature-sensitivity view uses permutation importance on the same fitted XGBoost pipeline. It measures predictive association, not the causal effect of a skill or employer characteristic. External Looker embeds, separate SHAP models and the previous PyCaret tuning interface have been replaced by this local, consistent workflow.
 
-### Model Evaluation
+## Run
 
-* **Holdout $R^2$ Score**: `0.57` (Holdout test set variance explained)
-
----
-
-## Dataset
-
-* **Source**: Glassdoor job postings subset for Data Science roles.
-* **Volume**: 742 cleaned job listings (`salary_data_cleaned.csv`).
-
----
-
-## Running Locally
+Use Python 3.11:
 
 ```bash
-# Clone the repository
-git clone https://github.com/Ansester/salary-prediction-ml.git
-cd salary-prediction-ml
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch the Streamlit application
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+python salary_model.py
+pytest -q
 streamlit run streamlit_app.py
 ```
 
----
+The evaluation is a small CPU workload, uses the committed CSV, and requires no account. CI runs regression tests and the offline evaluation. Tests cover duplicate/group separation, shared splits, all US state choices, and tracking opt-in.
 
-## Repository Structure
+## Optional tracking
 
+Tracking is disabled by default. The legacy code referenced `anas-ozeer/salary_prediction` on DagsHub; that historical integration does not establish contributor roles, and this version has no hard-coded third-party destination. To log an evaluation to a location you control:
+
+```bash
+pip install -r requirements-tracking.txt
+export SALARY_ENABLE_MLFLOW=1
+export MLFLOW_TRACKING_URI=./mlruns
+streamlit run streamlit_app.py
 ```
-salary-prediction-ml/
-├── streamlit_app.py           # Streamlit application & ML pipeline
-├── salary_data_cleaned.csv    # Cleaned dataset (742 job listings)
-├── requirements.txt           # Python dependencies
-├── mlruns/                    # MLflow experiment tracking logs
-├── LICENSE                    # Repository license
-└── README.md                  # Project documentation
-```
 
----
+Then use the explicit logging button. A configured remote URI may transmit metrics and the dataset hash; no dataset or model artifact is uploaded by this logging function.
 
-## License
-
-This repository's source code is licensed under the [Apache License 2.0](LICENSE).
+Source code is licensed under [Apache 2.0](LICENSE). That code license does not establish ownership or separate reuse rights for the upstream Glassdoor-derived data.
